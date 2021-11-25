@@ -5,8 +5,8 @@
 #define MAXLED              4
 #define NUMBEAT             4
 #define HEARBEATINTERVAL    100
-#define IRBLACK1            3000    //numero entregao por infrarrojo1 cuando ve le linea
-#define IRBLACK2            3000    //numero entregao por infrarrojo2 cuando ve le linea
+#define IRBLACK1            3600    //numero entregao por infrarrojo1 cuando ve le linea
+#define IRBLACK2            3600    //numero entregao por infrarrojo2 cuando ve le linea
 
 //hola
 typedef enum{ //contiene estados de la MEF //boton como pullup
@@ -60,7 +60,7 @@ typedef enum{ //Enumeración de la lista de comandos
         SET_LEDS=0xF2,
         SERVO_ANG=0xA2,
         SONICO=0xA3,
-        MOTORES=0xA5,
+        MOTORES=0xA1,
         HORQUILLA=0xA4,
         INFRARROJO=0xA0,
     }_eID;
@@ -144,15 +144,13 @@ PwmOut MotorA(PB_5);                //salida motor A left//5
 PwmOut MotorB(PA_8);                //salida motor B right//8
 
 DigitalOut HEARBEAT(PC_13);         // Defino la salida del led
-Serial pcCom(PA_9,PA_10,115200);    //Configuración del puerto serie, pin de rx, de tx y velocidad 115200
+Serial pcCom(PA_9,PA_10,115200);    // Configuración del puerto serie, pin de rx, de tx y velocidad 115200
 
 Timer miTimer;                      // Timer general
 Timer timerEco;                     // timer para el eco (sensorultrasonico)
 Timeout ToutTrigger;                // time out para controlar el tiemo del trigger
 
 Ticker timerGeneral;
-//int8_t auxPosServo=0 ;//auxiliar global posicion del servo
-//volatile uint32_t TimeVelocimetro=0;
 
 typedef struct{
     uint32_t timeEco=0;                     //Guarda dato a mandar sensor sonico
@@ -163,18 +161,20 @@ typedef struct{
     int8_t auxRPM;                          //Guarda RPM a mandar sensor Left
     int8_t auxRPM2;                         //Guarda RPM a mandar sensor Right
     volatile uint32_t timeVelocimetro=0;    //Saber cuando mandar datos a qt
-    volatile uint32_t timeVelocimetro2=0;    //Saber cuando mandar datos a qt
+    volatile uint32_t timeVelocimetro2=0;   //Saber cuando mandar datos a qt
     uint16_t tiksHorquilla=0;               //Contador del sonsor de horquilla para calculo de velocidad Left
     uint16_t tiksHorquilla2=0;              //Contador del sonsor de horquilla para calculo de velocidad Rigth
     uint16_t valueIR1=0;                    //Valor del sensor infrarrojo Left 
     uint16_t valueIR2=0;                    //Valor del sensor infrarrojo Right
     uint8_t auxCL=0;
-    uint8_t auxAng=0;
+    int8_t auxAng=0;
     uint8_t modoAuto=0;                     //modo delauto
     uint8_t Qmotor=0;                       //que motor girar
     uint8_t Qsentido=0;                     //en que sentido girar los motores 
     uint32_t velMot1=0;                     //velocidad motor1
     uint32_t velMot2=0;                     //velocidad motor2
+    volatile uint8_t hearbeatevent2=0;      //usada en el hearbeat de los modos
+    int hearbeatTime=0;                     //medir tiempo del hearbeat
 
 }_sAux1;
 volatile _sAux1 sAuxiliares;
@@ -182,7 +182,7 @@ volatile _sAux1 sAuxiliares;
 typedef struct{
     volatile bool togleSonico=0;        //usada para saber si mandar datos de sonico a qt
     volatile bool togleVelocimetro=0;   //usada para saber si mandar datos de horquilla a qt
-    volatile bool pwmMotor=0;           //saber si apagar o prender motor motor
+    volatile bool  pwmMotor=0;           //saber si apagar o prender motor motor
     volatile bool togleInfrarrojo=0;    //usada para saber si mandar datos de los infrarrojos a qt
     bool echosonico=0;
     bool ejecutarmodo=0;                //saber si se ejecuta el modo
@@ -192,7 +192,7 @@ volatile _sBanderas sBande;
 
 int main()                                                                          //////////////////
 {
-    int hearbeatTime=0;
+    //int hearbeatTime=0;
     miTimer.start();
     timerEco.start();
     myFlags.individualFlags.checkButtons=false;
@@ -207,34 +207,16 @@ int main()                                                                      
 
 
     while(true){
-        /*{MotorA.period_us(1000);
-        MotorB.period_us(1000);
-        dir1=0;
-        dir2=1;
-        dir3=1;
-        dir4=0;
-        MotorA.pulsewidth_us(800);
-        MotorB.pulsewidth_us(800)}*/
 
         if ((miTimer.read_ms()-sAuxiliares.timeSonico)>=HEARBEATINTERVAL){ //entra cada 100ms
             myTrigger();
             ToutTrigger.attach_us(&myTrigger,10);
             sAuxiliares.timeSonico=miTimer.read_ms();
-            //hola
         }
         if ((miTimer.read_ms()-sAuxiliares.timeIR)>=40){
             infrarrojo();
             sAuxiliares.timeIR=miTimer.read_ms();
         }
-
-        /*if ((miTimer.read_ms()-hearbeatTime)>=100){
-            hearbeatTime=miTimer.read_ms();
-            HEARBEAT=!HEARBEAT;
-        }*/
-        //hola
-        //for(uint8_t indice=0; indice<NUMBUTT;indice++){
-        //}
-        //startMef();
 
         if(miTimer.read_ms()-ourButton.timeBoton>=40){
             ourButton.timeBoton=miTimer.read_ms();
@@ -247,73 +229,38 @@ int main()                                                                      
             if (ourButton.timeDiff>100 && ourButton.timeDiff<1000){
                 ourButton.timeDiff=0;
                 sAuxiliares.modoAuto++;
+                sBande.ejecutarmodo=0;
                 if (sAuxiliares.modoAuto>=4){
                     sAuxiliares.modoAuto=0;
                 }
             }else{
-                if(ourButton.timeDiff>=1500 && ourButton.timeDiff<2500){
-                    sBande.ejecutarmodo=!sBande.ejecutarmodo;
-                    //ejecuto modo
+                if(ourButton.timeDiff>=1500 && ourButton.timeDiff<3000){
+                    sBande.ejecutarmodo =! sBande.ejecutarmodo; //ejecuto modo
                 }
             }
         }
+        hearbeatTask();
 
         switch(sAuxiliares.modoAuto){
             case 0: //IDLE  <- luz parpadeante cada 100ms
-            /*if(sAuxiliares.auxCL<3){
-                if ((miTimer.read_ms()-hearbeatTime)>=100){
-                hearbeatTime=miTimer.read_ms();
-                HEARBEAT=!HEARBEAT;
-                }
-                sAuxiliares.auxCL++;
-            }*/
-            if ((miTimer.read_ms()-hearbeatTime)>=HEARBEATINTERVAL){
-                hearbeatTime=miTimer.read_ms();
-                hearbeatTask();
-            }
                 //en este modo se espera la ejecucion y cambio de modo
             break;
             case 1:
-                if(sBande.ejecutarmodo!=1){
-                    if ((miTimer.read_ms()-hearbeatTime)>=100){
-                    hearbeatTime=miTimer.read_ms();
-                    HEARBEAT=!HEARBEAT;
-                    }
-                }
-                /*if(ourButton.timeDiff>=2){
-                    ModoAuto=MODO2;
-                }*/
                 if(sBande.ejecutarmodo){
-                    HEARBEAT=1;
+                    //HEARBEAT=1;
                     modo1();
                 }
             break;
             case 2:
-                if(sBande.ejecutarmodo!=1){
-                    if ((miTimer.read_ms()-hearbeatTime)>=200){
-                    hearbeatTime=miTimer.read_ms();
-                    HEARBEAT=!HEARBEAT;
-                    }
-                }
-                /*if(sAuxiliares.auxCL<3){
-                    if ((miTimer.read_ms()-hearbeatTime)>=100){
-                        hearbeatTime=miTimer.read_ms();
-                        hearbeatTask();
-                    }
-                    sAuxiliares.auxCL++;
-                }*/
                 if(sBande.ejecutarmodo){
-                    if ((miTimer.read_ms()-hearbeatTime)>=500){
-                        hearbeatTime=miTimer.read_ms();
-                        HEARBEAT=!HEARBEAT;
-                    }
                     modo2();
                 }
                 //hola
-
             break;
             case 3:
-                //equisde
+                if(sBande.ejecutarmodo){
+                    /* modo3(); */
+                }
             break;
 
         }
@@ -536,17 +483,24 @@ void decodeData(void)//Función para procesar el comando recibido
             //auxBuffTx[indiceAux++]=ACK;
             auxBuffTx[NBYTES]=0x03;
             sBande.togleSonico=!sBande.togleSonico;
-            /*myTrigger();
-            ToutTrigger.attach_us(&myTrigger,10);*/
             break;
+
         case MOTORES: //cuando recibo la señal motores
             auxBuffTx[indiceAux++]=MOTORES;
+            auxBuffTx[indiceAux++]=ACK;
             auxBuffTx[NBYTES]=0x02;
-            //auxBuffTx[indiceAux++]=ACK;
-            sAuxiliares.velMot2=1000;
-            sAuxiliares.velMot1=sAuxiliares.velMot2;
-            sAuxiliares.Qmotor=datosComProtocol.payload[1];
-            sAuxiliares.Qsentido=datosComProtocol.payload[2];
+            sBande.pwmMotor=!sBande.pwmMotor;
+            if(sBande.pwmMotor==1){
+                sAuxiliares.velMot2=1000;
+                sAuxiliares.velMot1=1000;
+            }else{
+                sAuxiliares.velMot2=0;
+                sAuxiliares.velMot1=0;
+            }
+            //sAuxiliares.Qsentido=1;
+            //sAuxiliares.Qmotor=0x03;
+            sAuxiliares.Qmotor=datosComProtocol.payload[2];
+            sAuxiliares.Qsentido=datosComProtocol.payload[3];
             MotorDriver();
             break;
         case HORQUILLA://cuando recibo la señar de horquilla
@@ -558,6 +512,7 @@ void decodeData(void)//Función para procesar el comando recibido
             auxBuffTx[indiceAux++]=SERVO_ANG;
             auxBuffTx[indiceAux++]=ACK;
             auxBuffTx[NBYTES]=0x03;
+            sBande.togleInfrarrojo=!sBande.togleInfrarrojo;
             break;
         default:
             auxBuffTx[indiceAux++]=0xDD;
@@ -565,13 +520,11 @@ void decodeData(void)//Función para procesar el comando recibido
             break;
     }
    cheksum=0;
-   for(uint8_t a=0 ;a < indiceAux ;a++)
-   {
+   for(uint8_t a=0 ;a < indiceAux ;a++){
        cheksum ^= auxBuffTx[a];
        datosComProtocol.bufferTx[datosComProtocol.indexWriteTx++]=auxBuffTx[a];
    }
     datosComProtocol.bufferTx[datosComProtocol.indexWriteTx++]=cheksum;
-
 }
 
 void encodeData(uint8_t auxID)
@@ -610,7 +563,6 @@ void encodeData(uint8_t auxID)
             auxBuffTx[NBYTES]=0x06;
             break;
         case INFRARROJO:
-            //¿que?
             auxBuffTx[indiceAux++]=INFRARROJO;
             myWord.ui16[0] = sAuxiliares.valueIR1;
             auxBuffTx[indiceAux++]=myWord.ui8[0];
@@ -644,13 +596,94 @@ void sendData(void) // Función para enviar los bytes hacia la pc
 }
 
 void hearbeatTask(void) {  //Función para hacer el hearbeats
-    if(hearBeatEvent < NUMBEAT){
+    
+    switch (sAuxiliares.modoAuto){
+    case 0:
+        if ((miTimer.read_ms()-sAuxiliares.hearbeatTime)>=HEARBEATINTERVAL){
+            sAuxiliares.hearbeatTime=miTimer.read_ms();
+            HEARBEAT=!HEARBEAT;
+        }
+        break;
+    case 1:
+        if(sBande.ejecutarmodo == 0){ //Luz parpadeante cada 3 segundos
+            if ((miTimer.read_ms()-sAuxiliares.hearbeatTime)>=100){
+                sAuxiliares.hearbeatTime=miTimer.read_ms();
+                if(sAuxiliares.hearbeatevent2==1){
+                    HEARBEAT=0;
+                }else{
+                    HEARBEAT=1;
+                }
+                sAuxiliares.hearbeatevent2 = (sAuxiliares.hearbeatevent2>=30) ? (0) : (sAuxiliares.hearbeatevent2+1);
+            }
+        }else{
+            if ((miTimer.read_ms()-sAuxiliares.hearbeatTime)>=100){
+                sAuxiliares.hearbeatTime=miTimer.read_ms();
+                if(sAuxiliares.hearbeatevent2<=5 || sAuxiliares.hearbeatevent2 == 7){
+                    HEARBEAT=0;
+                }else{
+                    HEARBEAT=1;
+                }
+                sAuxiliares.hearbeatevent2 = (sAuxiliares.hearbeatevent2>=30) ? (0) : (sAuxiliares.hearbeatevent2+1);
+            }
+        }
+        break;
+    case 2:
+        if(sBande.ejecutarmodo==0){ //Luz parpadeante cada 3 segundos
+            if ((miTimer.read_ms()-sAuxiliares.hearbeatTime)>=100){
+                sAuxiliares.hearbeatTime=miTimer.read_ms();
+                if(sAuxiliares.hearbeatevent2 == 1 || sAuxiliares.hearbeatevent2 == 3){
+                    HEARBEAT=0;
+                }else{
+                    HEARBEAT=1;
+                }
+                sAuxiliares.hearbeatevent2 = (sAuxiliares.hearbeatevent2>=30) ? (0) : (sAuxiliares.hearbeatevent2+1);
+            }
+        }else{
+            if ((miTimer.read_ms()-sAuxiliares.hearbeatTime)>=100){
+                sAuxiliares.hearbeatTime=miTimer.read_ms();
+                if(sAuxiliares.hearbeatevent2 <= 5 || sAuxiliares.hearbeatevent2 == 7 || sAuxiliares.hearbeatevent2 == 9){
+                    HEARBEAT=0;
+                }else{
+                    HEARBEAT=1;
+                }
+                sAuxiliares.hearbeatevent2 = (sAuxiliares.hearbeatevent2>=30) ? (0) : (sAuxiliares.hearbeatevent2+1);
+            }
+        }
+        break;
+    case 3:
+        if(sBande.ejecutarmodo==0){ //Luz parpadeante cada 3 segundos
+            if ((miTimer.read_ms()-sAuxiliares.hearbeatTime)>=100){
+                sAuxiliares.hearbeatTime=miTimer.read_ms();
+                if(sAuxiliares.hearbeatevent2 == 1 || sAuxiliares.hearbeatevent2 == 3 || sAuxiliares.hearbeatevent2 == 5){
+                    HEARBEAT=0;
+                }else{
+                    HEARBEAT=1;
+                }
+                sAuxiliares.hearbeatevent2 = (sAuxiliares.hearbeatevent2>=30) ? (0) : (sAuxiliares.hearbeatevent2+1);
+            }
+        }else{
+            if ((miTimer.read_ms()-sAuxiliares.hearbeatTime)>=100){
+                sAuxiliares.hearbeatTime=miTimer.read_ms();
+                if(sAuxiliares.hearbeatevent2 <= 5 || sAuxiliares.hearbeatevent2 == 7 || sAuxiliares.hearbeatevent2 == 9 || sAuxiliares.hearbeatevent2 == 11){
+                    HEARBEAT=0;    
+                }else{
+                    HEARBEAT=1;
+                }
+                sAuxiliares.hearbeatevent2 = (sAuxiliares.hearbeatevent2>=30) ? (0) : (sAuxiliares.hearbeatevent2+1);
+            }
+        }
+        break;
+    default:
+        break;
+    }
+    
+    /*if(hearBeatEvent < NUMBEAT){
         HEARBEAT=!HEARBEAT;
         hearBeatEvent++;
     }else{
         HEARBEAT=1;
         hearBeatEvent = (hearBeatEvent>=25) ? (0) : (hearBeatEvent+1);
-    }
+    }*/
     //hola
 }
 
@@ -724,14 +757,6 @@ void MotorDriver(){
         default:
             break;
     }
-    /*if (sBande.pwmMotor=1){
-    }else{
-        dir1=0;
-        dir2=0;
-        dir3=0;
-        dir4=0;
-    }*/
-    
 }
 
 void myTrigger(){
@@ -781,7 +806,7 @@ void VelocimetroL(void){
 void infrarrojo(){
     sAuxiliares.valueIR1=InfrarrojoL.read_u16();
     sAuxiliares.valueIR2=InfrarrojoR.read_u16();
-    if(sBande.togleInfrarrojo){    
+    if(sBande.togleInfrarrojo){
         encodeData(INFRARROJO);
     }
 }
@@ -793,35 +818,35 @@ void infrarrojo(){
 void modo1(){
     uint8_t varmode=0;
 
-    if(sAuxiliares.timeSonico > 400 && sAuxiliares.timeSonico < 1200){
+    if(sAuxiliares.timeEco > 400 && sAuxiliares.timeEco < 1200){
         varmode=1;
     }else{
-        if(sAuxiliares.timeSonico < 400){
+        if(sAuxiliares.timeEco < 400){
             varmode=2;
         }
     }
-    /*if(sAuxiliares.timeSonico > 1200){
+    if(sAuxiliares.timeEco > 1200){
         varmode=3;
-    }*/
+    }
 
     switch(varmode){
         case 1 : //objeto alejado del auto
-            if(sAuxiliares.timeSonico > 450){
-                sAuxiliares.velMot1=700;
-                sAuxiliares.velMot2=700;
+            if(sAuxiliares.timeEco > 480){
+                sAuxiliares.velMot1=400;
+                sAuxiliares.velMot2=400;
                 sAuxiliares.Qsentido=1;
                 sAuxiliares.Qmotor=0x03;
                 MotorDriver();
-            }else{ 
+            }else{
                 sAuxiliares.velMot1=0;
                 sAuxiliares.velMot2=0;
                 MotorDriver();
             }
             break;
         case 2 : //objeto cerca del auto
-            if(sAuxiliares.timeSonico < 380){
-                sAuxiliares.velMot1=600;
-                sAuxiliares.velMot2=600;
+            if(sAuxiliares.timeEco < 380){
+                sAuxiliares.velMot1=400;
+                sAuxiliares.velMot2=400;
                 sAuxiliares.Qsentido=0;
                 sAuxiliares.Qmotor=0x03;
                 MotorDriver();
@@ -832,38 +857,41 @@ void modo1(){
             }
             break;
         case 3 : //en busca del objeto
-            //Angulo -90
-            if(sAuxiliares.auxAng=90){
-                sAuxiliares.auxAng=-90;
+            //Angulo -9
+            /*if(sAuxiliares.auxAng == 90){
+                sAuxiliares.auxAng = -90;
             }else{
                 sAuxiliares.auxAng=sAuxiliares.auxAng+30;
-            }
+            }*/
+            sAuxiliares.auxAng = (sAuxiliares.auxAng==90) ? (-90) : (sAuxiliares.auxAng+30);
             sAuxiliares.auxPosServo=sAuxiliares.auxAng;
             ServoDriver();
 
-            if(sAuxiliares.timeSonico <= 1200){
+            if(sAuxiliares.timeEco <= 1200){
                 sAuxiliares.auxPosServo=0;
                 ServoDriver();
-                if(/*sAuxiliares.auxAng < 0 &&*/ sAuxiliares.timeSonico >= 1200){
+                if(sAuxiliares.auxAng < 0){
+                    //motor izq adelante
                     MotorDriver();
                 }else{
-                    if(sAuxiliares.auxAng > 0 && sAuxiliares.timeSonico >= 1200){
+                    if(sAuxiliares.auxAng > 0){
                         MotorDriver();
                     }
                 }
-                if(sAuxiliares.timeSonico <= 1200){
+                if(sAuxiliares.timeEco <= 1200){
                     MotorDriver();
                 }
             }
             break;
     }
-
 }
 
 void modo2(){
     uint8_t var=0;
-    if(sAuxiliares.timeSonico <= 1000){
+    if(sAuxiliares.timeEco <= 1000){
         var=2;
+        sAuxiliares.velMot1=0;
+        sAuxiliares.velMot2=0;
         MotorDriver();
     }else{
         var=1;
@@ -883,25 +911,29 @@ void modo2(){
                 }*/
 
                 if(sAuxiliares.valueIR1 > IRBLACK1){
-                    sAuxiliares.velMot2=550;
+                    sAuxiliares.velMot1=500;
+                    sAuxiliares.velMot2=300;
                     sAuxiliares.Qsentido=1;
-                    sAuxiliares.Qmotor=0x02;
+                    sAuxiliares.Qmotor=0x03;
                     MotorDriver();
                 }else{
-                    sAuxiliares.velMot2=800;
+                    sAuxiliares.velMot1=500;
+                    sAuxiliares.velMot2=500;
                     sAuxiliares.Qsentido=1;
-                    sAuxiliares.Qmotor=0x02;
+                    sAuxiliares.Qmotor=0x03;
                     MotorDriver();
                 }
                 if(sAuxiliares.valueIR2 > IRBLACK2){
-                    sAuxiliares.velMot2=550;
+                    sAuxiliares.velMot2=500;
+                    sAuxiliares.velMot1=350;
                     sAuxiliares.Qsentido=1;
-                    sAuxiliares.Qmotor=0x01;
+                    sAuxiliares.Qmotor=0x03;
                     MotorDriver();
                 }else{
-                    sAuxiliares.velMot2=800;
+                    sAuxiliares.velMot2=500;
+                    sAuxiliares.velMot1=500;
                     sAuxiliares.Qsentido=1;
-                    sAuxiliares.Qmotor=0x01;
+                    sAuxiliares.Qmotor=0x03;
                     MotorDriver();
                 }
 
@@ -911,7 +943,7 @@ void modo2(){
                 //giroenU();//gira90 a la izquierda
                 sAuxiliares.auxPosServo=-90;
                 ServoDriver();
-                if(sAuxiliares.timeSonico >= 700 && sAuxiliares.timeSonico <= 1200){
+                if(sAuxiliares.timeEco >= 700 && sAuxiliares.timeEco <= 1200){
                     MotorDriver();
                 }else{
                     MotorDriver();
