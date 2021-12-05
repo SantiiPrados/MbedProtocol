@@ -5,8 +5,9 @@
 #define MAXLED              4
 #define NUMBEAT             4
 #define HEARBEATINTERVAL    100
-#define IRBLACK1            3600    //numero entregao por infrarrojo1 cuando ve le linea
-#define IRBLACK2            3600    //numero entregao por infrarrojo2 cuando ve le linea
+#define IRBLACK1            5000    //numero entregao por infrarrojo1 cuando ve le linea
+#define IRBLACK2            5000    //numero entregao por infrarrojo2 cuando ve le linea
+#define TIKS                2
 
 //hola
 typedef enum{ //contiene estados de la MEF //boton como pullup
@@ -106,22 +107,23 @@ void actuallizaMef();
 void manejadorLed(uint8_t mask);
 void onDataRx(void);
 void decodeProtocol(void);
-void decodeData(void);   //decodifica los datos recividos por protocolo y manda datos
-void encodeData(uint8_t auxID);   //codifica y manda datos por el protocolo
+void decodeData(void);                  //decodifica los datos recividos por protocolo y manda datos
+void encodeData(uint8_t auxID);         //codifica y manda datos por el protocolo
 void sendData(void);
 void OnTimeOut(void);
 void hearbeatTask(void);
 void ServoDriver();
-void MotorDriver();   // se encarga de manejar los motores
+void MotorDriver();                     // se encarga de manejar los motores
 void myTrigger();
-void startEcho();           //Manda un eco con el sensor ultrasonico.
-void endEcho();             //Recibe el eco del ultrasonico para medir distancia.
-void VelocimetroR();        //Funcion para leer el sensor horquilla Right.
-void VelocimetroL();        //Funcion para leer el sensor horquilla Left.
-void infrarrojo();          //Funcion para leer el sensor infrarrojo.
-void giroenU();             //Funcion para girar el auto 90 en una direccion o 180 grados.
+void startEcho();                       //Manda un eco con el sensor ultrasonico.
+void endEcho();                         //Recibe el eco del ultrasonico para medir distancia.
+void VelocimetroR();                    //Funcion para leer el sensor horquilla Right.
+void VelocimetroL();                    //Funcion para leer el sensor horquilla Left.
+void infrarrojo();                      //Funcion para leer el sensor infrarrojo.
+void giroDriver(uint8_t var);           //Funcion para girar el auto 90 en una direccion o 180 grados.
 void modo1();
-void modo2();    
+void modo2();
+void modo3();
 //void parpadealed(uint8_t); 
 
 
@@ -153,39 +155,59 @@ Timeout ToutTrigger;                // time out para controlar el tiemo del trig
 Ticker timerGeneral;
 
 typedef struct{
-    uint32_t timeEco=0;                     //Guarda dato a mandar sensor sonico
-    uint32_t timeSonico=0;                  //guarda tiempo del sensor sonico
-    uint32_t timeIR=0;                      //guarda tiempo de infrarrojo
-    uint32_t Velocity=0;                    //guarda el dato a mandar del sensor horquilla
-    int8_t auxPosServo=0 ;                  //auxiliar global posicion del servo
-    int8_t auxRPM;                          //Guarda RPM a mandar sensor Left
-    int8_t auxRPM2;                         //Guarda RPM a mandar sensor Right
-    volatile uint32_t timeVelocimetro=0;    //Saber cuando mandar datos a qt
-    volatile uint32_t timeVelocimetro2=0;   //Saber cuando mandar datos a qt
-    uint16_t tiksHorquilla=0;               //Contador del sonsor de horquilla para calculo de velocidad Left
-    uint16_t tiksHorquilla2=0;              //Contador del sonsor de horquilla para calculo de velocidad Rigth
-    uint16_t valueIR1=0;                    //Valor del sensor infrarrojo Left 
-    uint16_t valueIR2=0;                    //Valor del sensor infrarrojo Right
+    uint32_t timeEco=0;                         //Guarda dato a mandar sensor sonico
+    uint32_t timeSonico=0;                      //guarda tiempo del sensor sonico
+    uint32_t timeIR=0;                          //guarda tiempo de infrarrojo
+    //uint32_t Velocity=0;                      //guarda el dato a mandar del sensor horquilla
+    int16_t auxPosServo=0 ;                      //auxiliar global posicion del servo
+    uint16_t auxRPM=0;                          //Guarda RPM a mandar sensor Left
+    uint16_t auxRPM2=0;                         //Guarda RPM a mandar sensor Right
+    volatile uint32_t timeVelocimetro=0;        //Saber cuando mandar datos a qt
+    volatile uint32_t timeVelocimetro2=0;       //Saber cuando mandar datos a qt
+    uint16_t tiksHorquilla=0;                   //Contador del sonsor de horquilla para calculo de velocidad Left
+    uint16_t tiksHorquilla2=0;                  //Contador del sonsor de horquilla para calculo de velocidad Rigth
+    uint16_t valueIR1=0;                        //Valor del sensor infrarrojo Left valor mas alto en el negro
+    uint16_t valueIR2=0;                        //Valor del sensor infrarrojo Right valor mas alto en el negro
     uint8_t auxCL=0;
     int8_t auxAng=0;
-    uint8_t modoAuto=0;                     //modo delauto
-    uint8_t Qmotor=0;                       //que motor girar
-    uint8_t Qsentido=0;                     //en que sentido girar los motores 
-    uint32_t velMot1=0;                     //velocidad motor1
-    uint32_t velMot2=0;                     //velocidad motor2
-    volatile uint8_t hearbeatevent2=0;      //usada en el hearbeat de los modos
-    int hearbeatTime=0;                     //medir tiempo del hearbeat
+    uint8_t modoAuto=0;                         //modo delauto
+    uint8_t Qmotor=0;                           //que motor girar
+    uint8_t Qsentido=0;                         //en que sentido girar los motores 
+    uint16_t velMot1=0;                         //velocidad motor1
+    uint16_t velMot2=0;                         //velocidad motor2
+    volatile uint8_t hearbeatevent2=0;          //usada en el hearbeat de los modos
+    int hearbeatTime=0;                         //medir tiempo del hearbeat
+    int timeMovetoServo=0;                      //Timer para mover el servo modo 1
+    int timeMovetoMotor=0;                      //timer para saber cuanto mover el motor
 
 }_sAux1;
 volatile _sAux1 sAuxiliares;
 
 typedef struct{
+    uint16_t lastSens=0;        //ultimo valor tomado por el infrarrojo
+    uint16_t auxTiks=0;         //usada para hacer control de los tiks que pasaron con sensor horquilla
+    bool objVista=0;            //objeto a la vista en el modo 2, para saber si estoy esquivando
+    bool auxgiro=0;             //variable de la funcion girodriver para saber que el auto ya giró
+    //uint32_t timeaux=0;
+    uint32_t timeGiro=0;        //guarda el tiempo para la funcion de girodriver
+    uint8_t estadoObj=0;        //usada para saber como esquivar el objeto
+    uint8_t lastPaso=0;         //usada para saber el paso de esquivar el objeto
+    //////////////////////modo3////////////////////////////////////////////////////////////////////////////////
+    uint8_t pared=0;            //usada para saber donde tengo pared
+    uint8_t checkCond=0;        //chequea la condicion en la que se encuentra el auto en el modo 3
+    uint8_t condCump=0;         //condicion a cumplir en el modo 3, hacia donde girar
+}_sAux2;
+volatile _sAux2 sAuxModo;
+
+
+typedef struct{
     volatile bool togleSonico=0;        //usada para saber si mandar datos de sonico a qt
     volatile bool togleVelocimetro=0;   //usada para saber si mandar datos de horquilla a qt
-    volatile bool  pwmMotor=0;           //saber si apagar o prender motor motor
+    volatile bool  pwmMotor=0;          //saber si apagar o prender motor motor
     volatile bool togleInfrarrojo=0;    //usada para saber si mandar datos de los infrarrojos a qt
     bool echosonico=0;
     bool ejecutarmodo=0;                //saber si se ejecuta el modo
+    bool girando=0;                     //usada en modo 1 para saber cuando el auto gira
 
 }_sBanderas;
 volatile _sBanderas sBande;
@@ -205,6 +227,8 @@ int main()                                                                      
     TacometroR.rise(&VelocimetroR);  // flanco de subida del horquillaR, llamo a la funcion para
     TacometroL.rise(&VelocimetroL);  // flanco de subida del horquillaL
 
+    MotorA.period_us(1000);
+    MotorB.period_us(1000);
 
     while(true){
 
@@ -213,6 +237,7 @@ int main()                                                                      
             ToutTrigger.attach_us(&myTrigger,10);
             sAuxiliares.timeSonico=miTimer.read_ms();
         }
+
         if ((miTimer.read_ms()-sAuxiliares.timeIR)>=40){
             infrarrojo();
             sAuxiliares.timeIR=miTimer.read_ms();
@@ -239,15 +264,27 @@ int main()                                                                      
                 }
             }
         }
+
         hearbeatTask();
 
         switch(sAuxiliares.modoAuto){
             case 0: //IDLE  <- luz parpadeante cada 100ms
+                /*sAuxiliares.velMot1=200;
+                sAuxiliares.velMot2=200;
+                sAuxiliares.Qsentido=1;
+                sAuxiliares.Qmotor=0x03;
+                MotorDriver();*/
                 //en este modo se espera la ejecucion y cambio de modo
             break;
             case 1:
+                /*if (miTimer.read_ms()-sAuxModo.timeaux>=3000){
+                    sAuxModo.timeaux=miTimer.read_ms();
+                    sAuxModo.timeGiro=miTimer.read_ms();
+                    //sAuxModo.auxTiks=sAuxiliares.auxRPM;
+                }else{
+                    giroDriver(1);
+                }*/
                 if(sBande.ejecutarmodo){
-                    //HEARBEAT=1;
                     modo1();
                 }
             break;
@@ -255,11 +292,10 @@ int main()                                                                      
                 if(sBande.ejecutarmodo){
                     modo2();
                 }
-                //hola
             break;
             case 3:
                 if(sBande.ejecutarmodo){
-                    /* modo3(); */
+                    modo3();
                 }
             break;
 
@@ -504,9 +540,9 @@ void decodeData(void)//Función para procesar el comando recibido
             MotorDriver();
             break;
         case HORQUILLA://cuando recibo la señar de horquilla
-            sAuxiliares.Velocity=1;
-            
-            
+            auxBuffTx[indiceAux++]=HORQUILLA;
+            auxBuffTx[NBYTES]=0x02;
+            sBande.togleVelocimetro=!sBande.togleVelocimetro;
             break;
         case INFRARROJO://cuando recibo la señar del infrarrojo
             auxBuffTx[indiceAux++]=SERVO_ANG;
@@ -555,11 +591,12 @@ void encodeData(uint8_t auxID)
             break;
         case HORQUILLA:
             auxBuffTx[indiceAux++]=HORQUILLA;
-            myWord.ui32 = sAuxiliares.Velocity;
+            myWord.ui16[0] = sAuxiliares.auxRPM;
             auxBuffTx[indiceAux++]=myWord.ui8[0];
             auxBuffTx[indiceAux++]=myWord.ui8[1];
-            auxBuffTx[indiceAux++]=myWord.ui8[2];
-            auxBuffTx[indiceAux++]=myWord.ui8[3];
+            myWord.ui16[0] = sAuxiliares.auxRPM2;
+            auxBuffTx[indiceAux++]=myWord.ui8[0];
+            auxBuffTx[indiceAux++]=myWord.ui8[1];
             auxBuffTx[NBYTES]=0x06;
             break;
         case INFRARROJO:
@@ -700,25 +737,15 @@ void OnTimeOut(void){
 }
 
 void ServoDriver(void){
-    Servo.period_ms(20);
+    //Servo.period_ms(20);
     Servo.pulsewidth_us(1500+((sAuxiliares.auxPosServo*1000)/180));
 }
 
 void MotorDriver(){
-    //uint8_t var1=0;
-    //sBande.pwmMotor!=sBande.pwmMotor;
-    if(sAuxiliares.velMot1==0 && sAuxiliares.velMot2==0){
-        dir1=0;
-        dir2=0;
-        dir3=0;
-        dir4=0;
-        //sBande.pwmMotor=0;
-    }
-    MotorA.period_us(1000);
-    MotorB.period_us(1000);
-    
+    uint16_t var=500;
+
     switch (sAuxiliares.Qmotor){
-        case 0x01://motor A
+        case 0x01://motor A left
             if (sAuxiliares.Qsentido){
                 dir1=0;
                 dir2=1;
@@ -726,18 +753,25 @@ void MotorDriver(){
                 dir1=1;
                 dir2=0;
             }
-            MotorA.pulsewidth_us(sAuxiliares.velMot1);
-            
-            break;
-        case 0x02: //motor B
-            if (sAuxiliares.Qsentido){
-                dir3=0;
-                dir4=1;
+            if (sAuxiliares.tiksHorquilla < TIKS){
+                MotorA.pulsewidth_us(var);
             }else{
+                MotorA.pulsewidth_us(sAuxiliares.velMot1);
+            }
+            break;
+        case 0x02: //motor B right
+            if (sAuxiliares.Qsentido){
                 dir3=1;
                 dir4=0;
+            }else{
+                dir3=0;
+                dir4=1;
             }
-            MotorB.pulsewidth_us(sAuxiliares.velMot2);
+            if (sAuxiliares.tiksHorquilla2 < TIKS){
+                MotorB.pulsewidth_us(var);
+            }else{
+                MotorB.pulsewidth_us(sAuxiliares.velMot2);
+            }
             break;
         case 0x03: //ambos motores
             if (sAuxiliares.Qsentido){
@@ -751,8 +785,40 @@ void MotorDriver(){
                 dir3=0;
                 dir4=1;
             }
-            MotorA.pulsewidth_us(sAuxiliares.velMot1);
-            MotorB.pulsewidth_us(sAuxiliares.velMot2);
+            if(sAuxiliares.tiksHorquilla < TIKS && sAuxiliares.velMot1 != 0){
+                MotorA.pulsewidth_us(var);
+                //MotorB.pulsewidth_us(var);
+            }else{
+                MotorA.pulsewidth_us(sAuxiliares.velMot1);
+            }
+            if (sAuxiliares.tiksHorquilla2 < TIKS && sAuxiliares.velMot2 != 0){
+                MotorB.pulsewidth_us(var);
+            }else{
+                MotorB.pulsewidth_us(sAuxiliares.velMot2);
+            }
+            break;
+        case 0x04: //dobla derecha o izquierda
+            if (sAuxiliares.Qsentido){
+                dir1=0;
+                dir2=1;
+                dir3=0;
+                dir4=1;
+            }else{
+                dir1=1;
+                dir2=0;
+                dir3=1;
+                dir4=0;
+            }
+            if(sAuxiliares.tiksHorquilla < TIKS && sAuxiliares.velMot1 != 0){
+                MotorA.pulsewidth_us(var);
+            }else{
+                MotorA.pulsewidth_us(sAuxiliares.velMot1);
+            }
+            if (sAuxiliares.tiksHorquilla2 < TIKS && sAuxiliares.velMot2 != 0){
+                MotorB.pulsewidth_us(var);
+            }else{
+                MotorB.pulsewidth_us(sAuxiliares.velMot2);
+            }
             break;
         default:
             break;
@@ -778,10 +844,10 @@ void endEcho(){
 }
 
 void VelocimetroR(void){
-
     sAuxiliares.tiksHorquilla++;
     if (miTimer.read_ms()-sAuxiliares.timeVelocimetro>=500){
-        sAuxiliares.auxRPM = sAuxiliares.tiksHorquilla;
+        //sAuxiliares.auxRPM =  sAuxiliares.auxRPM + sAuxiliares.tiksHorquilla;
+        sAuxiliares.auxRPM = (sAuxiliares.auxRPM == 64000) ? (0) : (sAuxiliares.auxRPM + sAuxiliares.tiksHorquilla);
         if(sBande.togleVelocimetro){
             encodeData(HORQUILLA);
         }
@@ -791,10 +857,10 @@ void VelocimetroR(void){
 }
 
 void VelocimetroL(void){
-
     sAuxiliares.tiksHorquilla2++;
     if (miTimer.read_ms()-sAuxiliares.timeVelocimetro2>=500){
-        sAuxiliares.auxRPM2 = sAuxiliares.tiksHorquilla2;
+        //sAuxiliares.auxRPM2 = sAuxiliares.auxRPM2 + sAuxiliares.tiksHorquilla2;
+        sAuxiliares.auxRPM2 = (sAuxiliares.auxRPM2==64000) ? (0) : (sAuxiliares.auxRPM2 + sAuxiliares.tiksHorquilla2);
         if(sBande.togleVelocimetro){
             encodeData(HORQUILLA);
         }
@@ -811,24 +877,113 @@ void infrarrojo(){
     }
 }
 
-/*void giroenU(){
-    
-}*/
+void giroDriver(uint8_t var){
+
+    switch (var){
+    case 1:
+        
+        if (miTimer.read_ms()-sAuxModo.timeGiro<=500){
+            //sAuxModo.timeGiro=miTimer.read_ms();
+            sAuxiliares.velMot1=450;
+            sAuxiliares.velMot2=450;
+            //sAuxiliares.Qsentido=0;
+            sAuxiliares.Qmotor=0x04;
+            MotorDriver();
+        }else{
+            sAuxiliares.velMot1=0;
+            sAuxiliares.velMot2=0;
+            //sAuxiliares.Qsentido=0;
+            sAuxiliares.Qmotor=0x04;
+            MotorDriver();
+            sAuxModo.auxgiro=1; //marca que ya giró
+        }
+        break;
+    case 2:
+        if (miTimer.read_ms()-sAuxModo.timeGiro<=850){
+            sAuxiliares.velMot1=450;
+            sAuxiliares.velMot2=450;
+            //sAuxiliares.Qsentido=1;
+            sAuxiliares.Qmotor=0x04;
+            MotorDriver();
+        }else{
+            sAuxiliares.velMot1=0;
+            sAuxiliares.velMot2=0;
+            //sAuxiliares.Qsentido=1;
+            sAuxiliares.Qmotor=0x04;
+            MotorDriver();
+        }
+        break;
+    case 3:
+        if (miTimer.read_ms()-sAuxModo.timeGiro<=300){
+            sAuxiliares.velMot1=450;
+            sAuxiliares.velMot2=450;
+            sAuxiliares.Qmotor=0x04;
+            MotorDriver();
+        }else{
+            sAuxiliares.velMot1=0;
+            sAuxiliares.velMot2=0;
+            sAuxiliares.Qmotor=0x04;
+            MotorDriver();
+        }
+        break;
+    default:
+        break;
+    }
+}
 
 void modo1(){
     uint8_t varmode=0;
-
-    if(sAuxiliares.timeEco > 400 && sAuxiliares.timeEco < 1200){
-        varmode=1;
+    if(sAuxiliares.timeEco > 1400){
+        varmode=3;
     }else{
-        if(sAuxiliares.timeEco < 400){
-            varmode=2;
+        if (sAuxiliares.auxPosServo!=0 || sBande.girando==1){
+            //varmode=4;
+            if(sAuxiliares.auxPosServo < 0){
+                //motor izq adelante
+                sBande.girando=1;
+                if(sAuxiliares.timeEco <= 1400){
+                    sAuxiliares.velMot1=450;
+                    sAuxiliares.velMot2=450;
+                    sAuxiliares.Qsentido=1;
+                    sAuxiliares.Qmotor=0x04;
+                    MotorDriver();
+                }else{
+                    sAuxiliares.velMot1=0;
+                    sAuxiliares.velMot2=0;
+                    MotorDriver();
+                    sAuxiliares.auxPosServo=0;
+                    ServoDriver();
+                    sBande.girando=0;
+                }
+            }else{
+                if(sAuxiliares.auxPosServo > 0){
+                    //giro izquierda
+                    sBande.girando=1;
+                    if (sAuxiliares.timeEco <=1400){
+                        sAuxiliares.velMot1=450;
+                        sAuxiliares.velMot2=450;
+                        sAuxiliares.Qsentido=0;
+                        sAuxiliares.Qmotor=0x04;
+                        MotorDriver();
+                    }else{
+                        sAuxiliares.velMot1=0;
+                        sAuxiliares.velMot2=0;
+                        MotorDriver();
+                        sAuxiliares.auxPosServo=0;
+                        ServoDriver();
+                        sBande.girando=0;
+                    }
+                }
+            }
+        }
+        if(sAuxiliares.timeEco >= 400){
+            varmode=1;
+        }else{
+            if(sAuxiliares.timeEco < 400){
+                varmode=2;
+            }
         }
     }
-    if(sAuxiliares.timeEco > 1200){
-        varmode=3;
-    }
-
     switch(varmode){
         case 1 : //objeto alejado del auto
             if(sAuxiliares.timeEco > 480){
@@ -857,29 +1012,52 @@ void modo1(){
             }
             break;
         case 3 : //en busca del objeto
-            //Angulo -9
-            /*if(sAuxiliares.auxAng == 90){
-                sAuxiliares.auxAng = -90;
-            }else{
-                sAuxiliares.auxAng=sAuxiliares.auxAng+30;
-            }*/
-            sAuxiliares.auxAng = (sAuxiliares.auxAng==90) ? (-90) : (sAuxiliares.auxAng+30);
-            sAuxiliares.auxPosServo=sAuxiliares.auxAng;
-            ServoDriver();
-
-            if(sAuxiliares.timeEco <= 1200){
-                sAuxiliares.auxPosServo=0;
+            sAuxiliares.velMot1=0;
+            sAuxiliares.velMot2=0;
+            MotorDriver();
+            if ((miTimer.read_ms()-sAuxiliares.timeMovetoServo)>=600){
+                sAuxiliares.timeMovetoServo=miTimer.read_ms();
+                sAuxiliares.auxAng = (sAuxiliares.auxAng==90) ? (-90) : (sAuxiliares.auxAng+30);
+                sAuxiliares.auxPosServo=sAuxiliares.auxAng;
                 ServoDriver();
-                if(sAuxiliares.auxAng < 0){
-                    //motor izq adelante
+            }
+            break;
+        case 4 :
+            if(sAuxiliares.auxPosServo < 0){
+                //motor izq adelante
+                sBande.girando=1;
+                if(sAuxiliares.timeEco <= 1400){
+                    sAuxiliares.velMot1=500;
+                    sAuxiliares.velMot2=100;
+                    sAuxiliares.Qsentido=1;
+                    sAuxiliares.Qmotor=0x03;
                     MotorDriver();
                 }else{
-                    if(sAuxiliares.auxAng > 0){
-                        MotorDriver();
-                    }
-                }
-                if(sAuxiliares.timeEco <= 1200){
+                    sAuxiliares.velMot1=0;
+                    sAuxiliares.velMot2=0;
                     MotorDriver();
+                    sAuxiliares.auxPosServo=0;
+                    ServoDriver();
+                    sBande.girando=0;
+                }
+            }else{
+                if(sAuxiliares.auxPosServo > 0){
+                    //giro izquierda
+                    sBande.girando=1;
+                    if (sAuxiliares.timeEco <=1400){
+                        sAuxiliares.velMot1=100;
+                        sAuxiliares.velMot2=500;
+                        sAuxiliares.Qsentido=1;
+                        sAuxiliares.Qmotor=0x03;
+                        MotorDriver();
+                    }else{
+                        sAuxiliares.velMot1=0;
+                        sAuxiliares.velMot2=0;
+                        MotorDriver();
+                        sAuxiliares.auxPosServo=0;
+                        ServoDriver();
+                        sBande.girando=0;
+                    }
                 }
             }
             break;
@@ -888,65 +1066,227 @@ void modo1(){
 
 void modo2(){
     uint8_t var=0;
-    if(sAuxiliares.timeEco <= 1000){
-        var=2;
+    if(sAuxiliares.timeEco <= 1000 || sAuxModo.objVista==1){
         sAuxiliares.velMot1=0;
         sAuxiliares.velMot2=0;
         MotorDriver();
+        sAuxModo.objVista=1;
+        var=2;
     }else{
         var=1;
     }
     switch(var){
             case 1 : //sigue la linea
-
-                /*if(sAuxiliares.valueIR1 < 50 && sAuxiliares.valueIR2 < 50){
-                    MotorDriver(0x03,1,800);
+                if (sAuxiliares.valueIR1>40000 && sAuxiliares.valueIR2>40000){
+                    sAuxiliares.velMot2=0;
+                    sAuxiliares.velMot1=0;
                 }else{
-                    if(sAuxiliares.valueIR1>50){
-                        MotorDriver(0x02,1,550);
+                    if(sAuxiliares.valueIR1 > IRBLACK1){
+                        sAuxiliares.velMot1=0; //motor left
+                        sAuxiliares.velMot2=440;
+                        //sAuxiliares.Qmotor=0x03;
+                        sAuxModo.lastSens=1;
+                    }else if(sAuxiliares.valueIR2 > IRBLACK2){
+                        sAuxiliares.velMot1=450;
+                        sAuxiliares.velMot2=0; //motor rhigt
+                        //sAuxiliares.Qmotor=0x03;
+                        sAuxModo.lastSens=2;
+                    }else{
+                        sAuxiliares.velMot1=450;
+                        sAuxiliares.velMot2=440;
+                        //sAuxiliares.Qmotor=0x03;
+                        sAuxModo.lastSens=3;
                     }
-                    if(sAuxiliares.valueIR2>50){
-                        MotorDriver(0x01,1,550);
-                    }
-                }*/
-
-                if(sAuxiliares.valueIR1 > IRBLACK1){
-                    sAuxiliares.velMot1=500;
-                    sAuxiliares.velMot2=300;
-                    sAuxiliares.Qsentido=1;
-                    sAuxiliares.Qmotor=0x03;
-                    MotorDriver();
-                }else{
-                    sAuxiliares.velMot1=500;
-                    sAuxiliares.velMot2=500;
-                    sAuxiliares.Qsentido=1;
-                    sAuxiliares.Qmotor=0x03;
-                    MotorDriver();
                 }
-                if(sAuxiliares.valueIR2 > IRBLACK2){
-                    sAuxiliares.velMot2=500;
-                    sAuxiliares.velMot1=350;
-                    sAuxiliares.Qsentido=1;
-                    sAuxiliares.Qmotor=0x03;
-                    MotorDriver();
-                }else{
-                    sAuxiliares.velMot2=500;
-                    sAuxiliares.velMot1=500;
-                    sAuxiliares.Qsentido=1;
-                    sAuxiliares.Qmotor=0x03;
-                    MotorDriver();
-                }
-
+                sAuxiliares.Qsentido=1;
+                sAuxiliares.Qmotor=0x03;
+                MotorDriver();
                 break;
             case 2 : //esquiva el objeto
+                if(sAuxiliares.auxPosServo!=-145){
+                    sAuxiliares.auxPosServo=-145;
+                    ServoDriver();
+                    sAuxModo.estadoObj=1;
+                    sAuxModo.lastPaso=1;
+                    sAuxModo.auxgiro=0;
+                    sAuxModo.timeGiro=miTimer.read_ms();
+                }
+                //////////////////////////////////////////////////////////////////////////////
+                switch (sAuxModo.estadoObj){
+                    case 1:
+                        switch (sAuxModo.lastPaso){
+                            case 1:
+                                if (sAuxModo.auxgiro==0){
+                                    sAuxiliares.Qsentido=0;
+                                    giroDriver(1);
+                                    //MotorDriver();
+                                }else{
+                                    sAuxModo.estadoObj=2;
+                                    sAuxModo.lastPaso=2;
+                                    sAuxModo.auxgiro=0;
+                                }
+                                break;
+                            case 2:
+                                if(sAuxModo.auxgiro==0){
+                                    sAuxiliares.Qsentido=1;
+                                    giroDriver(3);
+                                }else{
+                                    sAuxModo.estadoObj=2;
+                                    sAuxModo.lastPaso=3;
+                                    sAuxModo.auxgiro=0;
+                                }
+                                break;
+                            case 3:
+                                if(sAuxModo.auxgiro==0){
+                                    sAuxiliares.Qsentido=0;
+                                    giroDriver(3);
+                                }else{
+                                    sAuxModo.estadoObj=2;
+                                    sAuxModo.lastPaso=4;
+                                    sAuxModo.auxgiro=0;
+                                }
+                                break;
+                            case 4:
+                                /*if(sAuxModo.auxgiro==0){
+                                    sAuxiliares.Qsentido=1;
+                                    giroDriver(1);
+                                }else{
+                                    sAuxModo.estadoObj=0;
+                                    sAuxModo.auxgiro=0;
+                                    sAuxModo.lastPaso=0;
+                                    var=1;
+                                }*/
+                                break;
+                            default:
+                                break;
+                            }
+                        
+                        break;
+                    case 2:
+                        if(sAuxiliares.timeEco >= 1600 ){ //|| sAuxiliares.valueIR1>IRBLACK2
+                            sAuxiliares.velMot1=0;
+                            sAuxiliares.velMot2=0;
+                            sAuxiliares.Qmotor=0x03;
+                            sAuxiliares.Qsentido=1;
+                            MotorDriver();
+                            if(sAuxModo.lastPaso==2){
+                                sAuxModo.estadoObj=1;
+                                sAuxModo.timeGiro=miTimer.read_ms();
+                            }else if(sAuxModo.lastPaso==3){
+                                sAuxModo.estadoObj=1;
+                                sAuxModo.timeGiro=miTimer.read_ms();
+                            }else{
+                                sAuxiliares.auxPosServo=0;
+                                ServoDriver();
+                                var=1;
+                                sAuxModo.objVista=0;
+                            }
+                            
+                        }else if(sAuxiliares.timeEco >= 900){
+                            sAuxiliares.velMot1=400;
+                            sAuxiliares.velMot2=0;
+                            sAuxiliares.Qsentido=1;
+                            sAuxiliares.Qmotor=0x03;
+                        }else if(sAuxiliares.timeEco <= 800){
+                            sAuxiliares.velMot1=0;
+                            sAuxiliares.velMot2=400;
+                            sAuxiliares.Qmotor=0x03;
+                            sAuxiliares.Qsentido=1;
+                        }else{
+                            sAuxiliares.velMot1=400;
+                            sAuxiliares.velMot2=400;
+                            sAuxiliares.Qmotor=0x03;
+                            sAuxiliares.Qsentido=1;
+                        }
+                        if (sAuxiliares.valueIR1 > IRBLACK2 && sAuxModo.lastPaso == 4){
+                            sAuxModo.estadoObj=1;
+                            //sAuxModo.timeGiro=miTimer.read_ms();
+                            var=1;
+                            sAuxiliares.auxPosServo=0;
+                            ServoDriver();
 
-                //giroenU();//gira90 a la izquierda
-                sAuxiliares.auxPosServo=-90;
-                ServoDriver();
-                if(sAuxiliares.timeEco >= 700 && sAuxiliares.timeEco <= 1200){
-                    MotorDriver();
+                            sAuxiliares.velMot1=0;
+                            sAuxiliares.velMot2=0;
+                            sAuxModo.objVista=0;
+                        }
+                        MotorDriver();
+                        break;
+                    case 3:
+                        /*code*/
+                        break;
+                    
+                    default:
+                        break;
+                    }
+                break;
+    }
+}
+
+void modo3(){
+    uint8_t var1=0;
+    if(sAuxiliares.timeEco <= 600 || sAuxModo.pared==1){
+        sAuxiliares.velMot1=0;
+        sAuxiliares.velMot2=0;
+        MotorDriver();
+        sAuxModo.pared=1;
+        var1=2;
+    }else{
+        var1=1;
+    }
+    switch(var1){
+            case 1 : //sigue la linea
+                if (sAuxiliares.valueIR1>40000 && sAuxiliares.valueIR2>40000){
+                    sAuxiliares.velMot2=0;
+                    sAuxiliares.velMot1=0;
                 }else{
-                    MotorDriver();
+                    if(sAuxiliares.valueIR1 > IRBLACK1){
+                        sAuxiliares.velMot1=0; //motor left
+                        sAuxiliares.velMot2=300;
+                        sAuxiliares.Qmotor=0x03;
+                        sAuxModo.lastSens=1;
+                    }else if(sAuxiliares.valueIR2 > IRBLACK2){
+                        sAuxiliares.velMot1=300;
+                        sAuxiliares.velMot2=0;
+                        sAuxiliares.Qmotor=0x03;
+                        sAuxModo.lastSens=2;
+                    }else{
+                        sAuxiliares.velMot1=300;
+                        sAuxiliares.velMot2=300;
+                        sAuxiliares.Qmotor=0x03;
+                        sAuxModo.lastSens=3;
+                    }
+                }
+                sAuxiliares.Qsentido=1;
+                sAuxiliares.Qmotor=0x03;
+                MotorDriver();
+                break;
+            case 2 :
+                switch (sAuxModo.checkCond){
+                case 1:
+                    switch (sAuxModo.condCump){
+                    case 1:
+                        /* code */
+                        break;
+                    case 2:
+                        /* code */
+                        break;
+                    
+                    default:
+                        break;
+                    }
+                    break;
+                case 2:
+                    /* code */
+                    break;
+                case 3:
+                    /* code */
+                    break;
+                case 4:
+                    /* code */
+                    break;
+                
+                default:
+                    break;
                 }
                 break;
     }
